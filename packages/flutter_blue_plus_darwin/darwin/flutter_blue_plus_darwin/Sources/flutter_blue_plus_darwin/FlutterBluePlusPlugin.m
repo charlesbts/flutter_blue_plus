@@ -109,6 +109,8 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             fileLogger.rollingFrequency = 60 * 60 * 24; // 24-hour rolling
             fileLogger.logFileManager.maximumNumberOfLogFiles = 7;
             [DDLog addLogger:fileLogger]; // File
+            NSString *logsDir = fileLogger.logFileManager.logsDirectory;
+            NSLog(@"Logs directory: %@", logsDir);
             result(@YES);
             return;
         }
