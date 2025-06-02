@@ -1,12 +1,14 @@
 // Copyright 2017-2023, Charles Weinberger & Paul DeMarco.
 // All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
-
+@import CocoaLumberjack;
 #import "./include/flutter_blue_plus_darwin/FlutterBluePlusPlugin.h"
 
 #define Log(LEVEL, FORMAT, ...) [self log:LEVEL format:@"[FBP-iOS] " FORMAT, ##__VA_ARGS__]
 
 NSString * const CCCD = @"2902";
+
+static const DDLogLevel ddLogLevel = DDLogLevelVerbose;
 
 @interface CBUUID (CBUUIDAdditionsFlutterBluePlus)
 - (NSString *)uuidStr;
@@ -96,12 +98,17 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 {
     @try
     {
-        Log(LDEBUG, @"handleMethodCall: %@", call.method);
+        DDLogInfo(@"handleMethodCall: %@", call.method);
 
         if ([@"setLogLevel" isEqualToString:call.method])
         {
             NSNumber *idx = [call arguments];
             self.logLevel = (LogLevel)[idx integerValue];
+            [DDLog addLogger:[DDOSLogger sharedInstance]]; // Console
+            DDFileLogger *fileLogger = [[DDFileLogger alloc] init];
+            fileLogger.rollingFrequency = 60 * 60 * 24; // 24-hour rolling
+            fileLogger.logFileManager.maximumNumberOfLogFiles = 7;
+            [DDLog addLogger:fileLogger]; // File
             result(@YES);
             return;
         }
@@ -118,7 +125,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         // initialize adapter
         if (self.centralManager == nil)
         {
-            Log(LDEBUG, @"initializing CBCentralManager");
+            DDLogInfo(@"initializing CBCentralManager");
 
             NSMutableDictionary *options = [NSMutableDictionary dictionary];
 
@@ -130,15 +137,15 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
                 options[CBCentralManagerOptionRestoreIdentifierKey] = @"flutterBluePlusRestoreIdentifier";
             }
 
-            Log(LDEBUG, @"showPowerAlert: %@", [self.showPowerAlert boolValue] ? @"yes" : @"no");
-            Log(LDEBUG, @"restoreState: %@", [self.restoreState boolValue] ? @"yes" : @"no");
+            DDLogInfo(@"showPowerAlert: %@", [self.showPowerAlert boolValue] ? @"yes" : @"no");
+            DDLogInfo(@"restoreState: %@", [self.restoreState boolValue] ? @"yes" : @"no");
 
             self.centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil options:options];
         }
         // initialize timer
         if (self.checkForMtuChangesTimer == nil)
         {
-            Log(LDEBUG, @"initializing checkForMtuChangesTimer");
+            DDLogInfo(@"initializing checkForMtuChangesTimer");
 
             self.checkForMtuChangesTimer = [NSTimer scheduledTimerWithTimeInterval:0.025
                 target:self
@@ -176,7 +183,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             // (i.e. Hot Restart) so also reset native state
             [self disconnectAllDevices:@"flutterRestart"];
 
-            Log(LDEBUG, @"connectedPeripherals: %lu", self.connectedPeripherals.count);
+            DDLogInfo(@"connectedPeripherals: %lu", self.connectedPeripherals.count);
 
             if (self.connectedPeripherals.count == 0) {
                 [self.knownPeripherals removeAllObjects];
@@ -187,9 +194,9 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         }
         else if ([@"connectedCount" isEqualToString:call.method])
         {
-            Log(LDEBUG, @"connectedPeripherals: %lu", self.connectedPeripherals.count);
+            DDLogInfo(@"connectedPeripherals: %lu", self.connectedPeripherals.count);
             if (self.connectedPeripherals.count == 0) {
-                Log(LDEBUG, @"Hot Restart: complete");
+                DDLogInfo(@"Hot Restart: complete");
                 [self.knownPeripherals removeAllObjects];
             }
             result(@(self.connectedPeripherals.count));
@@ -336,14 +343,14 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
             // already connecting?
             if ([self.currentlyConnectingPeripherals objectForKey:remoteId] != nil) {
-                Log(LDEBUG, @"already connecting");
+                DDLogInfo(@"already connecting");
                 result(@YES); // still work to do
                 return;
             }
 
             // already connected?
             if ([self getConnectedPeripheral:remoteId] != nil) {
-                Log(LDEBUG, @"already connected");
+                DDLogInfo(@"already connected");
                 result(@NO); // no work to do
                 return;
             }
@@ -404,7 +411,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             if (peripheral == nil ) {
                 peripheral = [self.currentlyConnectingPeripherals objectForKey:remoteId];
                 if (peripheral != nil) {
-                    Log(LDEBUG, @"disconnect: cancelling connection in progress");
+                    DDLogInfo(@"disconnect: cancelling connection in progress");
                     [self.currentlyConnectingPeripherals removeObjectForKey:remoteId];
                 }   
             }
@@ -412,7 +419,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
                 peripheral = [self getConnectedPeripheral:remoteId];
             }
             if (peripheral == nil) {
-                Log(LDEBUG, @"already disconnected");
+                DDLogInfo(@"already disconnected");
                 result(@NO); // no work to do
                 return;
             }
@@ -924,14 +931,14 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
 - (void)disconnectAllDevices:(NSString*)func
 {
-    Log(LDEBUG, @"disconnectAllDevices(%@)", func);
+    DDLogInfo(@"disconnectAllDevices(%@)", func);
 
     // request disconnections
     for (NSString *key in self.connectedPeripherals)
     {
         CBPeripheral *peripheral = [self.connectedPeripherals objectForKey:key];
 
-        Log(LDEBUG, @"calling disconnect: %@", key);
+        DDLogInfo(@"calling disconnect: %@", key);
 
         if ([func isEqualToString:@"adapterTurnOff"]) {
             // inexplicably, iOS does not call 'didDisconnectPeripheral' when
@@ -1043,7 +1050,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 - (void)centralManager:(CBCentralManager *)central
       willRestoreState:(NSDictionary *)state {
 
-    Log(LDEBUG, @"centralManagerWillRestoreState");
+    DDLogInfo(@"centralManagerWillRestoreState");
 
     // restore adapter state
     [self centralManagerDidUpdateState:central];
@@ -1057,11 +1064,11 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
         if (peripheral.state != CBPeripheralStateConnected) {
             // connect
-            Log(LDEBUG, @"Restore: reconnecting to %@", peripheral.identifier.UUIDString);
+            DDLogInfo(@"Restore: reconnecting to %@", peripheral.identifier.UUIDString);
             [self.centralManager connectPeripheral:peripheral options:nil];
         } else {
             // update connection state
-            Log(LDEBUG, @"Restore: already connected to %@", peripheral.identifier.UUIDString);
+            DDLogInfo(@"Restore: already connected to %@", peripheral.identifier.UUIDString);
             [self centralManager:central didConnectPeripheral:peripheral];
             
             for (CBService *service in peripheral.services) {
@@ -1087,7 +1094,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
 - (void)centralManagerDidUpdateState:(nonnull CBCentralManager *)central
 {
-    Log(LDEBUG, @"centralManagerDidUpdateState %@", [self cbManagerStateString:self.centralManager.state]);
+    DDLogInfo(@"centralManagerDidUpdateState %@", [self cbManagerStateString:self.centralManager.state]);
 
     int adapterState = [self bmAdapterStateEnum:self.centralManager.state];
 
@@ -1204,7 +1211,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 - (void)centralManager:(CBCentralManager *)central
   didConnectPeripheral:(CBPeripheral *)peripheral
 {
-    Log(LDEBUG, @"didConnectPeripheral");
+    DDLogInfo(@"didConnectPeripheral");
 
     NSString* remoteId = [[peripheral identifier] UUIDString];
 
@@ -1237,7 +1244,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         Log(LERROR, @"didDisconnectPeripheral:");
         Log(LERROR, @"  error: %@", [error localizedDescription]);
     } else {
-        Log(LDEBUG, @"didDisconnectPeripheral:");
+        DDLogInfo(@"didDisconnectPeripheral:");
     }
 
     NSString* remoteId = [[peripheral identifier] UUIDString];
@@ -1277,7 +1284,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         Log(LERROR, @"didFailToConnectPeripheral:");
         Log(LERROR, @"  error: %@", [error localizedDescription]);
     } else {
-        Log(LDEBUG, @"didFailToConnectPeripheral:");
+        DDLogInfo(@"didFailToConnectPeripheral:");
     }
 
     NSString* remoteId = [[peripheral identifier] UUIDString];
@@ -1317,13 +1324,13 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         Log(LERROR, @"didDiscoverServices:");
         Log(LERROR, @"  error: %@", [error localizedDescription]);
     } else {
-        Log(LDEBUG, @"didDiscoverServices:");
+        DDLogInfo(@"didDiscoverServices:");
     }
 
     // discover characteristics and included services
     [self.servicesToDiscover addObjectsFromArray:peripheral.services];
     for (CBService *s in [peripheral services]) {
-        Log(LDEBUG, @"  svc: %@", [s.UUID uuidStr]);
+        DDLogInfo(@"  svc: %@", [s.UUID uuidStr]);
         [peripheral discoverCharacteristics:nil forService:s];
         [peripheral discoverIncludedServices:nil forService:s];
     }
@@ -1338,8 +1345,8 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         Log(LERROR, @"  svc: %@", [service.UUID uuidStr]);
         Log(LERROR, @"  error: %@", [error localizedDescription]);
     } else {
-        Log(LDEBUG, @"didDiscoverCharacteristicsForService:");
-        Log(LDEBUG, @"  svc: %@", [service.UUID uuidStr]);
+        DDLogInfo(@"didDiscoverCharacteristicsForService:");
+        DDLogInfo(@"  svc: %@", [service.UUID uuidStr]);
     }
 
     // Loop through and discover descriptors for characteristics
@@ -1347,7 +1354,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
     [self.characteristicsToDiscover addObjectsFromArray:service.characteristics];
     for (CBCharacteristic *c in [service characteristics])
     {
-        Log(LDEBUG, @"    chr: %@", [c.UUID uuidStr]);
+        DDLogInfo(@"    chr: %@", [c.UUID uuidStr]);
         [peripheral discoverDescriptorsForCharacteristic:c];
     }
 }
@@ -1361,14 +1368,14 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         Log(LERROR, @"  chr: %@", [characteristic.UUID uuidStr]);
         Log(LERROR, @"  error: %@", [error localizedDescription]);
     } else {
-        Log(LDEBUG, @"didDiscoverDescriptorsForCharacteristic:");
-        Log(LDEBUG, @"  chr: %@", [characteristic.UUID uuidStr]);
+        DDLogInfo(@"didDiscoverDescriptorsForCharacteristic:");
+        DDLogInfo(@"  chr: %@", [characteristic.UUID uuidStr]);
     }
 
     // print descriptors
     for (CBDescriptor *d in [characteristic descriptors])
     {
-        Log(LDEBUG, @"    desc: %@", [d.UUID uuidStr]);
+        DDLogInfo(@"    desc: %@", [d.UUID uuidStr]);
     }
 
     // have we finished discovering?
@@ -1407,8 +1414,8 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         Log(LERROR, @"  svc: %@", [service.UUID uuidStr]);
         Log(LERROR, @"  error: %@", [error localizedDescription]);
     } else {
-        Log(LDEBUG, @"didDiscoverIncludedServicesForService:");
-        Log(LDEBUG, @"  svc: %@", [service.UUID uuidStr]);
+        DDLogInfo(@"didDiscoverIncludedServicesForService:");
+        DDLogInfo(@"  svc: %@", [service.UUID uuidStr]);
     }
 
     // discover characteristics 
@@ -1425,8 +1432,8 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         Log(LERROR, @"  chr: %@", [characteristic.UUID uuidStr]);
         Log(LERROR, @"  error: %@", [error localizedDescription]);
     } else {
-        Log(LDEBUG, @"didUpdateValueForCharacteristic:");
-        Log(LDEBUG, @"  chr: %@", [characteristic.UUID uuidStr]);
+        DDLogInfo(@"didUpdateValueForCharacteristic:");
+        DDLogInfo(@"  chr: %@", [characteristic.UUID uuidStr]);
     }
 
     CBService *primaryService = [self getPrimaryService:peripheral characteristic:characteristic];
@@ -1459,8 +1466,8 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         Log(LERROR, @"  chr: %@", [characteristic.UUID uuidStr]);
         Log(LERROR, @"  error: %@", [error localizedDescription]);
     } else {
-        Log(LDEBUG, @"didWriteValueForCharacteristic:");
-        Log(LDEBUG, @"  chr: %@", [characteristic.UUID uuidStr]);
+        DDLogInfo(@"didWriteValueForCharacteristic:");
+        DDLogInfo(@"  chr: %@", [characteristic.UUID uuidStr]);
     }
 
     CBService *primaryService = [self getPrimaryService:peripheral characteristic:characteristic];
@@ -1503,8 +1510,8 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         Log(LERROR, @"  chr: %@", [characteristic.UUID uuidStr]);
         Log(LERROR, @"  error: %@", [error localizedDescription]);
     } else {
-        Log(LDEBUG, @"didUpdateNotificationStateForCharacteristic:");
-        Log(LDEBUG, @"  chr: %@", [characteristic.UUID uuidStr]);
+        DDLogInfo(@"didUpdateNotificationStateForCharacteristic:");
+        DDLogInfo(@"  chr: %@", [characteristic.UUID uuidStr]);
     }
 
     CBService *primaryService = [self getPrimaryService:peripheral characteristic:characteristic];
@@ -1551,9 +1558,9 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         Log(LERROR, @"  desc: %@", [descriptor.UUID uuidStr]);
         Log(LERROR, @"  error: %@", [error localizedDescription]);
     } else {
-        Log(LDEBUG, @"didUpdateValueForDescriptor:");
-        Log(LDEBUG, @"  chr: %@", [descriptor.characteristic.UUID uuidStr]);
-        Log(LDEBUG, @"  desc: %@", [descriptor.UUID uuidStr]);
+        DDLogInfo(@"didUpdateValueForDescriptor:");
+        DDLogInfo(@"  chr: %@", [descriptor.characteristic.UUID uuidStr]);
+        DDLogInfo(@"  desc: %@", [descriptor.UUID uuidStr]);
     }
 
     CBService *primaryService = [self getPrimaryService:peripheral characteristic:descriptor.characteristic];
@@ -1589,9 +1596,9 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         Log(LERROR, @"  desc: %@", [descriptor.UUID uuidStr]);
         Log(LERROR, @"  error: %@", [error localizedDescription]);
     } else {
-        Log(LDEBUG, @"didWriteValueForDescriptor:");
-        Log(LDEBUG, @"  chr: %@", [descriptor.characteristic.UUID uuidStr]);
-        Log(LDEBUG, @"  desc: %@", [descriptor.UUID uuidStr]);
+        DDLogInfo(@"didWriteValueForDescriptor:");
+        DDLogInfo(@"  chr: %@", [descriptor.characteristic.UUID uuidStr]);
+        DDLogInfo(@"  desc: %@", [descriptor.UUID uuidStr]);
     }
 
     CBService *primaryService = [self getPrimaryService:peripheral characteristic:descriptor.characteristic];
@@ -1629,7 +1636,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
 - (void)peripheralDidUpdateName:(CBPeripheral *)peripheral
 {
-    Log(LDEBUG, @"didUpdateName: %@", [peripheral name]);
+    DDLogInfo(@"didUpdateName: %@", [peripheral name]);
 
     // See BmNameChanged
     NSDictionary* result = @{
@@ -1643,7 +1650,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 - (void)peripheral:(CBPeripheral *)peripheral 
     didModifyServices:(NSArray<CBService *> *)invalidatedServices
 {
-    Log(LDEBUG, @"didModifyServices");
+    DDLogInfo(@"didModifyServices");
 
     NSDictionary* result = [self bmBluetoothDevice:peripheral];
 
@@ -1657,7 +1664,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         Log(LERROR, @"didReadRSSI:");
         Log(LERROR, @"  error: %@", [error localizedDescription]);
     } else {
-        Log(LDEBUG, @"didReadRSSI: %@", rssi);
+        DDLogInfo(@"didReadRSSI: %@", rssi);
     }
 
     // See BmReadRssiResult
