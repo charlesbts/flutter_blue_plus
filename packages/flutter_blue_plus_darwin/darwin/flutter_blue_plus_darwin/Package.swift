@@ -12,15 +12,11 @@ let package = Package(
     products: [
         .library(name: "flutter-blue-plus-darwin", targets: ["flutter_blue_plus_darwin"])
     ],
-    dependencies: [
-        .package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", from: "3.7.0")
-    ],
+    dependencies: [],
     targets: [
         .target(
             name: "flutter_blue_plus_darwin",
-            dependencies: [
-                .product(name: "CocoaLumberjack", package: "CocoaLumberjack")
-            ],
+            dependencies: [],
             resources: [
                 // TODO: If your plugin requires a privacy manifest
                 // (e.g. if it uses any required reason APIs), update the PrivacyInfo.xcprivacy file

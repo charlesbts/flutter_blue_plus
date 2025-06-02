@@ -19,4 +19,6 @@ Pod::Spec.new do |s|
   s.osx.deployment_target = '10.14'
   s.framework = 'CoreBluetooth'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', }
+  
+  s.dependency 'CocoaLumberjack'
 end

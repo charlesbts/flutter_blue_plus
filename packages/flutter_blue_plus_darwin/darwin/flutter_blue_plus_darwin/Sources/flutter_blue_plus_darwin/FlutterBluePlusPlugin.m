@@ -1,8 +1,8 @@
 // Copyright 2017-2023, Charles Weinberger & Paul DeMarco.
 // All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
-@import CocoaLumberjack;
 #import "./include/flutter_blue_plus_darwin/FlutterBluePlusPlugin.h"
+#import <CocoaLumberjack/CocoaLumberjack.h>
 
 #define Log(LEVEL, FORMAT, ...) [self log:LEVEL format:@"[FBP-iOS] " FORMAT, ##__VA_ARGS__]
 
